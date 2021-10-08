@@ -1,31 +1,40 @@
-use tokio::net::{TcpListener, TcpStream};
+use std::sync::Arc;
+
+use bytes::Bytes;
 use mini_redis::{Connection, Frame};
+use mini_redis_rs::ShardDb;
+use tokio::net::{TcpListener, TcpStream};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Result<T> = std::result::Result<T, Error>;
 
+type Db = Arc<ShardDb<String, Bytes>>;
+
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    let addr = "127.0.0.1:6379";
+
     // Bind the listener to the address
-    let listener = TcpListener::bind("127.0.0.1:6379").await?;
+    let listener = TcpListener::bind(addr).await?;
+
+    println!("Listening on {}", addr);
+
+    let shard_db = Arc::new(ShardDb::new(8));
 
     loop {
         let (socket, _) = listener.accept().await?;
 
+        let shard_db = shard_db.clone();
+
         tokio::spawn(async move {
-            process(socket).await;
+            process(socket, shard_db).await;
         });
     }
-
-    // Ok(())
 }
 
-async fn process(socket: TcpStream) {
+async fn process(socket: TcpStream, db: Db) {
     use mini_redis::Command::{self, Get, Set};
-    use std::collections::HashMap;
 
-    let mut db = HashMap::new();
-    
     // The `Connection` lets us read/write redis **frames** instead of byte
     // streams. The `Connection` type is defined by min-redis.
     let mut connection = Connection::new(socket);
@@ -34,23 +43,28 @@ async fn process(socket: TcpStream) {
     while let Some(frame) = connection.read_frame().await.unwrap() {
         let response = match Command::from_frame(frame).unwrap() {
             Set(cmd) => {
-                // The value is stored as `Vec<u8>`
-                db.insert(cmd.key().to_string(), cmd.value().to_vec());
+                let mut shard = db.get(cmd.key().to_string()).lock().unwrap();
+
+                shard.insert(cmd.key().to_string(), cmd.value().clone());
                 Frame::Simple("OK".to_string())
-            },
+            }
             Get(cmd) => {
-                if let Some(value) = db.get(cmd.key()) {
+                let shard = db.get(cmd.key().to_string()).lock().unwrap();
+
+                if let Some(value) = shard.get(cmd.key()) {
                     // `Frame::Bulk` expects data to be of type `Bytes`.
                     Frame::Bulk(value.clone().into())
                 } else {
                     Frame::Null
                 }
-            },
+            }
             cmd => panic!("unimplemented command: {:?}", cmd),
         };
-        
+
         // Write the response to the client.
-        connection.write_frame(&response).await
+        connection
+            .write_frame(&response)
+            .await
             .expect("Failed to write frame to connection");
     }
 }

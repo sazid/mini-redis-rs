@@ -11,24 +11,46 @@ pub async fn main() -> Result<()> {
 
     loop {
         let (socket, _) = listener.accept().await?;
-        process(socket).await?;
+
+        tokio::spawn(async move {
+            process(socket).await;
+        });
     }
 
     // Ok(())
 }
 
-async fn process(socket: TcpStream) -> Result<()> {
+async fn process(socket: TcpStream) {
+    use mini_redis::Command::{self, Get, Set};
+    use std::collections::HashMap;
+
+    let mut db = HashMap::new();
+    
     // The `Connection` lets us read/write redis **frames** instead of byte
     // streams. The `Connection` type is defined by min-redis.
     let mut connection = Connection::new(socket);
 
-    if let Some(frame) = connection.read_frame().await? {
-        println!("GOT: {:?}", frame);
-
-        // Respond with an error
-        let response = Frame::Error("unimplemented".to_string());
-        connection.write_frame(&response).await?;
+    // Use `read_frame()` to receive a command from the connection.
+    while let Some(frame) = connection.read_frame().await.unwrap() {
+        let response = match Command::from_frame(frame).unwrap() {
+            Set(cmd) => {
+                // The value is stored as `Vec<u8>`
+                db.insert(cmd.key().to_string(), cmd.value().to_vec());
+                Frame::Simple("OK".to_string())
+            },
+            Get(cmd) => {
+                if let Some(value) = db.get(cmd.key()) {
+                    // `Frame::Bulk` expects data to be of type `Bytes`.
+                    Frame::Bulk(value.clone().into())
+                } else {
+                    Frame::Null
+                }
+            },
+            cmd => panic!("unimplemented command: {:?}", cmd),
+        };
+        
+        // Write the response to the client.
+        connection.write_frame(&response).await
+            .expect("Failed to write frame to connection");
     }
-    
-    Ok(())
 }

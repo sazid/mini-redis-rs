@@ -24,7 +24,7 @@ pub async fn main() {
     // Create a new channel with a capacity of at most 32.
     let (tx, mut rx) = mpsc::channel(32);
     let tx2 = tx.clone();
-    
+
     // The `move` keyword is used to **move** ownership of `rx` into the task.
     let manager = tokio::spawn(async move {
         // Establish a connection to the server.
@@ -65,7 +65,7 @@ pub async fn main() {
 
     let t2 = tokio::spawn(async move {
         let (resp_tx, resp_rx) = oneshot::channel();
-        
+
         let cmd = Command::Set {
             key: "name".to_string(),
             val: "Mini".into(),

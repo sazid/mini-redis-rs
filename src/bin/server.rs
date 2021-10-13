@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use mini_redis::{Connection, Frame};
-use mini_redis_rs::ShardDb;
+use mini_redis_rs::shard_db::ShardDb;
 use tokio::net::{TcpListener, TcpStream};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -12,10 +12,10 @@ type Db = Arc<ShardDb<String, Bytes>>;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let addr = "127.0.0.1:6379";
+    let addr = format!("127.0.0.1:{}", mini_redis_rs::DEFAULT_PORT);
 
     // Bind the listener to the address
-    let listener = TcpListener::bind(addr).await?;
+    let listener = TcpListener::bind(&addr).await?;
 
     println!("Listening on {}", addr);
 

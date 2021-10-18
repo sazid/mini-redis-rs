@@ -2,19 +2,19 @@ use std::io::Cursor;
 
 use crate::{frame, Frame, Result};
 use bytes::{Buf, BytesMut};
-use tokio::io::AsyncReadExt;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 
 #[derive(Debug)]
 pub struct Connection {
-    stream: TcpStream,
+    stream: BufWriter<TcpStream>,
     buffer: BytesMut,
 }
 
 impl Connection {
     pub fn new(stream: TcpStream) -> Connection {
         Connection {
-            stream,
+            stream: BufWriter::new(stream),
             buffer: BytesMut::with_capacity(4096),
         }
     }
@@ -49,8 +49,59 @@ impl Connection {
         }
     }
 
+    /// Write a decimal frame to the stream.
+    async fn write_decimal(&mut self, val: i64) -> io::Result<()> {
+        use std::io::Write;
+
+        // Convert the value to a string.
+        let mut buf = [0u8; 12];
+        let mut buf = Cursor::new(&mut buf[..]);
+        write!(&mut buf, "{}", val)?;
+
+        let pos = buf.position() as usize;
+        self.stream.write_all(&buf.get_ref()[..pos]).await?;
+        self.stream.write_all(b"\r\n").await?;
+
+        Ok(())
+    }
+
     /// Write a frame to the connection
-    pub async fn write_frame(&mut self, _frame: &Frame) -> Result<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
+        match frame {
+            Frame::Simple(val) => {
+                self.stream.write_u8(b'+').await?;
+                self.stream.write_all(val.as_bytes()).await?;
+                self.stream.write_all(b"\r\n").await?;
+            },
+            Frame::Error(val) => {
+                self.stream.write_u8(b'+').await?;
+                self.stream.write_all(val.as_bytes()).await?;
+                self.stream.write_all(b"\r\n").await?;
+            },
+            Frame::Integer(val) => {
+                self.stream.write_u8(b':').await?;
+                self.write_decimal(*val).await?;
+            },
+            Frame::Bulk(val) => {
+                let len = val.len();
+
+                self.stream.write_u8(b'$').await?;
+                self.write_decimal(len as i64).await?;
+                self.stream.write_all(&val).await?;
+                self.stream.write_all(b"\r\n").await?;
+            },
+            Frame::Null => {
+                self.stream.write_all(b"$-1\r\n").await?;
+            },
+            // Encoding an `Array` from within a value cannot be done using a
+            // recursive strategy. In general, async fns do not support
+            // recursion. Mini-redis has not needed to encode nested arrays yet,
+            // so for now it is skipped.
+            Frame::Array(_) => unreachable!(),
+        }
+
+        self.stream.flush().await?;
+
         Ok(())
     }
 

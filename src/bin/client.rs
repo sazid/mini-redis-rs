@@ -38,12 +38,12 @@ pub async fn main() {
                     let res = client.get(&key).await;
                     // Ignore errors.
                     let _ = resp.send(res);
-                },
+                }
                 Set { key, val, resp } => {
                     let res = client.set(&key, val).await;
                     // Ignore errors.
                     let _ = resp.send(res);
-                },
+                }
             }
         }
     });

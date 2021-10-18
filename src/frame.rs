@@ -192,15 +192,15 @@ impl fmt::Display for Frame {
             },
             Frame::Null => "(nil)".fmt(fmt),
             Frame::Array(parts) => {
-				for (i, part) in parts.iter().enumerate() {
-					if i > 0 {
-						write!(fmt, " ")?;
-						part.fmt(fmt)?;
-					}
-				}
+                for (i, part) in parts.iter().enumerate() {
+                    if i > 0 {
+                        write!(fmt, " ")?;
+                        part.fmt(fmt)?;
+                    }
+                }
 
-				Ok(())
-			},
+                Ok(())
+            }
         }
     }
 }
@@ -289,5 +289,16 @@ impl From<FromUtf8Error> for Error {
 impl From<TryFromIntError> for Error {
     fn from(_src: TryFromIntError) -> Error {
         "protocol error; invalid frame format".into()
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::Incomplete => "stream ended early".fmt(fmt),
+            Error::Other(err) => err.fmt(fmt),
+        }
     }
 }

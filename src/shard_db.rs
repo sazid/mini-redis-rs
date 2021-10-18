@@ -1,7 +1,5 @@
 use std::{collections::HashMap, sync::Mutex};
 
-
-
 pub fn hash(s: String) -> usize {
     const P: usize = 31;
     const MOD: usize = 1e9 as usize + 7;

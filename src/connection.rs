@@ -1,5 +1,7 @@
-use crate::{Frame, Result};
-use bytes::BytesMut;
+use std::io::Cursor;
+
+use crate::{frame, Frame, Result};
+use bytes::{Buf, BytesMut};
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
@@ -22,7 +24,7 @@ impl Connection {
     /// Returns `None` if EOF is reached.
     pub async fn read_frame(&mut self) -> Result<Option<Frame>> {
         loop {
-            // Attempt to parse a frame from the buffered dat. If enough data
+            // Attempt to parse a frame from the buffered data. If enough data
             // has been buffered, the frame is returned.
             if let Some(frame) = self.parse_frame()? {
                 return Ok(Some(frame));
@@ -39,9 +41,9 @@ impl Connection {
                 // there is, this means that the peer closed the socket while
                 // sending a frame.
                 if self.buffer.is_empty() {
-                    return Ok(None)
+                    return Ok(None);
                 } else {
-                    return Err("connection reset by peer".into())
+                    return Err("connection reset by peer".into());
                 }
             }
         }
@@ -52,7 +54,27 @@ impl Connection {
         Ok(())
     }
 
-    fn parse_frame(&mut self) -> Result<Option<Frame>> {
-        todo!()
+    fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
+        let mut buf = Cursor::new(&self.buffer[..]);
+
+        match Frame::check(&mut buf) {
+            Ok(_) => {
+                // Get byte length of the frame.
+                let len = buf.position() as usize;
+
+                // Reset the internal cursor for the call to `parse`.
+                buf.set_position(0);
+
+                // Parse the frame.
+                let frame = Frame::parse(&mut buf)?;
+
+                // Discard the frame from the buffer.
+                self.buffer.advance(len);
+
+                Ok(Some(frame))
+            }
+            Err(frame::Error::Incomplete) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 }

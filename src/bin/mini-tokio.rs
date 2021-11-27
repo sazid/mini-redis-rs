@@ -55,7 +55,10 @@ fn main() {
 
     mini_tokio.spawn(async {
         let when = Instant::now() + Duration::from_millis(1000);
-        let future = Delay { when, msg: "first task" };
+        let future = Delay {
+            when,
+            msg: "first task",
+        };
 
         let out = future.await;
         assert_eq!(out, "done");
@@ -63,7 +66,10 @@ fn main() {
 
     mini_tokio.spawn(async {
         let when = Instant::now() + Duration::from_millis(2000);
-        let future = Delay { when, msg: "second task" };
+        let future = Delay {
+            when,
+            msg: "second task",
+        };
 
         let out = future.await;
         assert_eq!(out, "done");

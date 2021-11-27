@@ -1,6 +1,5 @@
 use crossbeam::channel;
 use futures::task::{self, ArcWake};
-use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -10,6 +9,7 @@ use std::time::{Duration, Instant};
 
 struct Delay {
     when: Instant,
+    msg: &'static str,
 }
 
 impl Future for Delay {
@@ -17,7 +17,7 @@ impl Future for Delay {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if Instant::now() >= self.when {
-            println!("Hello World!");
+            println!("{}", self.msg);
             Poll::Ready("done")
         } else {
             // Get a handle to the waker for the current task.
@@ -55,7 +55,15 @@ fn main() {
 
     mini_tokio.spawn(async {
         let when = Instant::now() + Duration::from_millis(1000);
-        let future = Delay { when };
+        let future = Delay { when, msg: "first task" };
+
+        let out = future.await;
+        assert_eq!(out, "done");
+    });
+
+    mini_tokio.spawn(async {
+        let when = Instant::now() + Duration::from_millis(2000);
+        let future = Delay { when, msg: "second task" };
 
         let out = future.await;
         assert_eq!(out, "done");
@@ -75,7 +83,7 @@ struct Task {
 impl ArcWake for Task {
     fn wake_by_ref(arc_self: &Arc<Self>) {
         // arc_self.schedule();
-        arc_self.executor.send(arc_self.clone());
+        arc_self.executor.send(arc_self.clone()).ok();
     }
 }
 

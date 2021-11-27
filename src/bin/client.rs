@@ -79,7 +79,7 @@ pub async fn main() {
         println!("GOT = {:?}", res);
     });
 
-    t1.await.unwrap();
     t2.await.unwrap();
+    t1.await.unwrap();
     manager.await.unwrap();
 }

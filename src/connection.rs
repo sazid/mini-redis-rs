@@ -72,16 +72,16 @@ impl Connection {
                 self.stream.write_u8(b'+').await?;
                 self.stream.write_all(val.as_bytes()).await?;
                 self.stream.write_all(b"\r\n").await?;
-            },
+            }
             Frame::Error(val) => {
                 self.stream.write_u8(b'+').await?;
                 self.stream.write_all(val.as_bytes()).await?;
                 self.stream.write_all(b"\r\n").await?;
-            },
+            }
             Frame::Integer(val) => {
                 self.stream.write_u8(b':').await?;
                 self.write_decimal(*val).await?;
-            },
+            }
             Frame::Bulk(val) => {
                 let len = val.len();
 
@@ -89,10 +89,10 @@ impl Connection {
                 self.write_decimal(len as i64).await?;
                 self.stream.write_all(&val).await?;
                 self.stream.write_all(b"\r\n").await?;
-            },
+            }
             Frame::Null => {
                 self.stream.write_all(b"$-1\r\n").await?;
-            },
+            }
             // Encoding an `Array` from within a value cannot be done using a
             // recursive strategy. In general, async fns do not support
             // recursion. Mini-redis has not needed to encode nested arrays yet,
